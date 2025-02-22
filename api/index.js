@@ -3,51 +3,48 @@ const path = require('path');
 const cloudinary = require('cloudinary').v2;
 const { v4: uuidv4 } = require('uuid');
 const express = require('express');
-const cors = require('cors');
+const cors = require('cors'); // Added to enable CORS
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const multer = require('multer');
 const bcrypt = require('bcrypt');
-const mongoosePaginate = require('mongoose-paginate-v2');
+const mongoosePaginate = require('mongoose-paginate-v2'); // Import the pagination plugin
 
 const app = express();
 
-// Enhanced CORS Configuration
-const vercelPattern = /https:\/\/realform-.*-abrahams-projects-dd6fb99d\.vercel\.app/;
+// Enable CORS for all routes
+const allowedOrigins = [
+    'https://realform-git-main-abrahams-projects-dd6fb99d.vercel.app',
+    'https://realform-4g8155rbf-abrahams-projects-dd6fb99d.vercel.app',
+    'https://realform-hjc2r87jy-abrahams-projects-dd6fb99d.vercel.app',
+    'https://realmeform.vercel.app' // Add your new frontend origin here
+];
 
 app.use(cors({
-    origin: (origin, callback) => {
-        if (
-            !origin || // Allow non-browser clients
-            vercelPattern.test(origin) || // Match Vercel pattern
-            origin === 'https://realform-4g8155rbf-abrahams-projects-dd6fb99d.vercel.app'
-        ) {
+    origin: function (origin, callback) {
+        if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
         }
     },
-    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Origin'],
-    credentials: true,
-    optionsSuccessStatus: 204
+    methods: ['GET', 'POST', 'DELETE'],
+    credentials: true
 }));
 
-app.options('*', cors()); // Handle preflight requests
-
-// Cloudinary Configuration
+// Configure Cloudinary
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Database Connection
+// Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
-    useUnifiedTopology: true
+    useUnifiedTopology: true,
 })
-.then(() => console.log('MongoDB connected'))
+.then(() => console.log('MongoDB connected successfully'))
 .catch(err => console.error('MongoDB connection error:', err));
 
 // Schema and Model
@@ -58,21 +55,45 @@ const registrationSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     dateOfBirth: { type: Date, required: true },
     gender: { type: String, required: true },
-    biography: String,
+    biography: { type: String },
     profilePicture: { type: String, required: true },
     createdAt: { type: Date, default: Date.now }
 });
 
-registrationSchema.plugin(mongoosePaginate);
+registrationSchema.plugin(mongoosePaginate); // Add the pagination plugin to the schema
+
 const Registration = mongoose.model('Registration', registrationSchema);
 
-// Middleware
+// Configure Multer
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Middleware with increased body size limit
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
+
+// Serve static files from the "public" directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Routes
+// Test route to ensure server is working
+app.get('/test', (req, res) => {
+    res.send('Server is working!');
+});
+
+// Admin Authentication (with logging)
+const authenticateAdmin = (req, res, next) => {
+    const authHeader = req.headers.authorization || '';
+    const [username, password] = Buffer.from(authHeader.split(' ')[1] || '', 'base64').toString().split(':');
+
+    console.log(`Username: ${username}, Password: ${password}`);  // Add this line for debugging
+
+    if (username === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) {
+        return next();
+    }
+    res.set('WWW-Authenticate', 'Basic realm="Admin Access"');
+    res.status(401).json({ error: 'Authentication required' });
+};
+
+// Root route to serve the HTML file
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/views/index.html'));
 });
@@ -81,29 +102,31 @@ app.get('/view-registration', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/views/view-registration.html'));
 });
 
-// Registration Endpoint
+// Registration Endpoint with Cloudinary
 app.post('/register', upload.single('profilePicture'), async (req, res) => {
     try {
-        // File Validation
+        // Validation
         if (!req.file) return res.status(400).json({ error: 'Profile picture required' });
         if (!['image/jpeg', 'image/png'].includes(req.file.mimetype)) {
             return res.status(400).json({ error: 'Only JPEG/PNG allowed' });
         }
 
-        // Cloudinary Upload
+        // Convert buffer to data URI for Cloudinary
         const dataURI = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-        const cloudResult = await cloudinary.uploader.upload(dataURI, {
+
+        // Upload to Cloudinary
+        const result = await cloudinary.uploader.upload(dataURI, {
             folder: 'profile-pictures',
             public_id: uuidv4(),
             overwrite: false
         });
 
-        // Create User
+        // Create user with Cloudinary URL
         const hashedPassword = await bcrypt.hash(req.body.password, 10);
         const newUser = new Registration({
             ...req.body,
             password: hashedPassword,
-            profilePicture: cloudResult.secure_url,
+            profilePicture: result.secure_url,
             dateOfBirth: new Date(req.body.dateOfBirth)
         });
 
@@ -112,22 +135,14 @@ app.post('/register', upload.single('profilePicture'), async (req, res) => {
     } catch (error) {
         console.error('Registration error:', error);
         const status = error.code === 11000 ? 409 : 500;
-        res.status(status).json({ error: error.message });
+        res.status(status).json({
+            error: error.message,
+            ...(error.http_code && { cloudinaryError: error })
+        });
     }
 });
 
-// Admin Endpoints
-const authenticateAdmin = (req, res, next) => {
-    const authHeader = req.headers.authorization || '';
-    const [username, password] = Buffer.from(authHeader.split(' ')[1] || '', 'base64').toString().split(':');
-    
-    if (username === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) {
-        return next();
-    }
-    res.set('WWW-Authenticate', 'Basic realm="Admin Access"');
-    res.status(401).json({ error: 'Authentication required' });
-};
-
+// Admin Endpoint
 app.get('/api/registrations', authenticateAdmin, async (req, res) => {
     try {
         const { page = 1, limit = 10 } = req.query;
@@ -144,23 +159,36 @@ app.get('/api/registrations', authenticateAdmin, async (req, res) => {
     }
 });
 
+// Delete Registration Endpoint
 app.delete('/api/registration/:id', authenticateAdmin, async (req, res) => {
     try {
         const { id } = req.params;
+
+        // Validate ObjectId
         if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({ error: 'Invalid ID' });
+            return res.status(400).json({ error: 'Invalid registration ID' });
         }
 
-        const deletedUser = await Registration.findByIdAndDelete(id);
-        if (!deletedUser) return res.status(404).json({ error: 'User not found' });
-        
-        res.json({ message: 'User deleted successfully' });
+        console.log(`Attempting to delete registration with ID: ${id}`);
+
+        const deletedRegistration = await Registration.findByIdAndDelete(id);
+        if (!deletedRegistration) {
+            console.log(`Registration with ID: ${id} not found`);
+            return res.status(404).json({ error: 'Registration not found' });
+        }
+
+        console.log(`Registration with ID: ${id} deleted successfully`);
+        res.status(200).json({ message: 'Registration deleted successfully' });
     } catch (error) {
-        console.error('Delete error:', error);
+        console.error('Error deleting registration:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
 
-// Server Start
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
+
+module.exports = app;
