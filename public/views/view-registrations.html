@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>View Registrations</title>
+    <style>
+        /* (Your existing CSS styles here) */
+    </style>
+</head>
+<body>
+    <h1>View Registrations</h1>
+    <div class="container">
+        <div id="registrations" class="registrations"></div>
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <script>
+        const BASE_URL = 'https://realform-4g8155rbf-abrahams-projects-dd6fb99d.vercel.app'; // Your deployed URL
+
+        async function loadRegistrations(page = 1) {
+            let credentials = sessionStorage.getItem('adminCredentials');
+
+            if (!credentials) {
+                const userInput = prompt('Enter admin credentials in the format username:password');
+                if (!userInput || !userInput.includes(':')) {
+                    alert('Invalid format. Please enter credentials in the format username:password');
+                    return;
+                }
+                credentials = btoa(userInput);
+                sessionStorage.setItem('adminCredentials', credentials);
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/registrations?page=${page}&limit=10`, {
+                    headers: { 'Authorization': `Basic ${credentials}` }
+                });
+
+                if (!response.ok) {
+                    alert('Authentication failed or server error');
+                    sessionStorage.removeItem('adminCredentials');
+                    return;
+                }
+
+                const data = await response.json();
+                const totalPages = data.totalPages;
+                const currentPage = data.page;
+
+                const registrationsDiv = document.getElementById('registrations');
+                registrationsDiv.innerHTML = data.docs.map(reg => {
+                    const optimizedImageUrl = reg.profilePicture
+                        .replace('/upload/', '/upload/w_400,h_400,c_fill,q_auto,f_auto/');
+
+                    return `
+                        <div class="registration" id="${reg._id}">
+                            <img src="${optimizedImageUrl}" 
+                                 alt="${reg.firstName}'s profile picture"
+                                 onclick="window.open('${reg.profilePicture}')">
+                            <p><strong>Name:</strong> ${reg.firstName} ${reg.lastName}</p>
+                            <p><strong>Email:</strong> ${reg.email}</p>
+                            <p><strong>DOB:</strong> ${new Date(reg.dateOfBirth).toLocaleDateString()}</p>
+                            <p><strong>Gender:</strong> ${reg.gender}</p>
+                            ${reg.biography ? `<p><strong>Bio:</strong> ${reg.biography}</p>` : ''}
+                            <button class="delete-btn" onclick="deleteRegistration('${reg._id}')">Delete</button>
+                        </div>
+                    `;
+                }).join('');
+
+                const paginationDiv = document.getElementById('pagination');
+                paginationDiv.innerHTML = `
+                    <button ${currentPage === 1 ? 'disabled' : ''} onclick="loadRegistrations(${currentPage - 1})">Previous</button>
+                    <span>Page ${currentPage} of ${totalPages}</span>
+                    <button ${currentPage >= totalPages ? 'disabled' : ''} onclick="loadRegistrations(${currentPage + 1})">Next</button>
+                `;
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to load registrations');
+            }
+        }
+
+        async function deleteRegistration(id) {
+            let credentials = sessionStorage.getItem('adminCredentials');
+
+            if (!credentials) {
+                const userInput = prompt('Enter admin credentials in the format username:password');
+                if (!userInput || !userInput.includes(':')) {
+                    alert('Invalid format. Please enter credentials in the format username:password');
+                    return;
+                }
+                credentials = btoa(userInput);
+                sessionStorage.setItem('adminCredentials', credentials);
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/registration/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Basic ${credentials}` }
+                });
+
+                if (!response.ok) {
+                    alert('Failed to delete registration');
+                    return;
+                }
+
+                document.getElementById(id).remove();
+                alert('Registration deleted successfully');
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to delete registration');
+            }
+        }
+
+        // Initial load
+        loadRegistrations();
+    </script>
+</body>
+</html>
