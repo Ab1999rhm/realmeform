@@ -3,12 +3,12 @@ const path = require('path');
 const cloudinary = require('cloudinary').v2;
 const { v4: uuidv4 } = require('uuid');
 const express = require('express');
-const cors = require('cors'); // Added to enable CORS
+const cors = require('cors');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const multer = require('multer');
 const bcrypt = require('bcrypt');
-const mongoosePaginate = require('mongoose-paginate-v2'); // Import the pagination plugin
+const mongoosePaginate = require('mongoose-paginate-v2');
 
 const app = express();
 
@@ -17,7 +17,7 @@ const allowedOrigins = [
     'https://realform-git-main-abrahams-projects-dd6fb99d.vercel.app',
     'https://realform-4g8155rbf-abrahams-projects-dd6fb99d.vercel.app',
     'https://realform-hjc2r87jy-abrahams-projects-dd6fb99d.vercel.app',
-    'https://realmeform.vercel.app' // Add your new frontend origin here
+    'https://realmeform.vercel.app'
 ];
 
 app.use(cors({
@@ -60,7 +60,7 @@ const registrationSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
-registrationSchema.plugin(mongoosePaginate); // Add the pagination plugin to the schema
+registrationSchema.plugin(mongoosePaginate);
 
 const Registration = mongoose.model('Registration', registrationSchema);
 

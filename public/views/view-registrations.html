@@ -2,115 +2,133 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>View Registrations</title>
-    <style>
-        /* (Your existing CSS styles here) */
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registration Form</title>
+    <link rel="stylesheet" href="/css/form.css">
 </head>
 <body>
-    <h1>View Registrations</h1>
     <div class="container">
-        <div id="registrations" class="registrations"></div>
-        <div class="pagination" id="pagination"></div>
+        <h1>Create Your Account</h1>
+        <form id="registrationForm" enctype="multipart/form-data" method="post" action="/register">
+            <!-- CSRF Token (Will be populated by server) -->
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+            <!-- First Name -->
+            <div class="group_form">
+                <label for="firstName">First Name:</label>
+                <input type="text" name="firstName" id="firstName" placeholder="Enter your name" required aria-describedby="firstNameError">
+                <div class="error-message" id="firstNameError" role="alert" aria-live="polite">First name is required.</div>
+            </div>
+
+            <!-- Last Name -->
+            <div class="group_form">
+                <label for="lastName">Last Name:</label>
+                <input type="text" name="lastName" id="lastName" placeholder="Enter your last name" required aria-describedby="lastNameError">
+                <div class="error-message" id="lastNameError" role="alert" aria-live="polite">Last name is required.</div>
+            </div>
+
+            <!-- Password -->
+            <div class="group_form">
+                <label for="password">Password:</label>
+                <input type="password" name="password" id="password" placeholder="Enter your password" required aria-describedby="passwordError passwordStrength">
+                <div class="password-strength" id="passwordStrength" aria-live="polite"></div>
+                <div class="error-message" id="passwordError" role="alert">Password must be at least 8 characters with a letter and number.</div>
+            </div>
+
+            <!-- Confirm Password -->
+            <div class="group_form">
+                <label for="confirmPassword">Confirm Password:</label>
+                <input type="password" name="confirmPassword" id="confirmPassword" placeholder="Confirm your password" required aria-describedby="confirmPasswordError">
+                <div class="error-message" id="confirmPasswordError" role="alert" aria-live="polite">Passwords do not match.</div>
+            </div>
+
+            <!-- Email -->
+            <div class="group_form">
+                <label for="email">Email:</label>
+                <input type="email" name="email" id="email" placeholder="Enter your email" required aria-describedby="emailError">
+                <div class="error-message" id="emailError" role="alert" aria-live="polite">Please enter a valid email address.</div>
+            </div>
+
+            <!-- Date of Birth -->
+            <div class="group_form">
+                <label for="dateOfBirth">Date of Birth:</label>
+                <input type="date" name="dateOfBirth" id="dateOfBirth" required aria-describedby="dobError">
+                <div class="error-message" id="dobError" role="alert" aria-live="polite">You must be at least 13 years old.</div>
+            </div>
+
+            <!-- Gender -->
+            <div class="group_form">
+                <label for="gender">Gender:</label>
+                <select name="gender" id="gender" required aria-describedby="genderError">
+                    <option value="">Select your gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                </select>
+                <div class="error-message" id="genderError" role="alert" aria-live="polite">Please select your gender.</div>
+            </div>
+
+            <!-- Biography -->
+            <div class="group_form">
+                <label for="biography">Biography:</label>
+                <textarea name="biography" id="biography" rows="4" placeholder="Tell us about yourself..." aria-describedby="biographyHelp"></textarea>
+            </div>
+
+            <!-- Profile Picture -->
+            <div class="group_form">
+                <label for="profilePicture">Profile Picture:</label>
+                <input type="file" name="profilePicture" id="profilePicture" accept="image/*" required aria-describedby="profilePictureError">
+                <div class="error-message" id="profilePictureError" role="alert" aria-live="polite">Please upload a profile picture (JPEG/PNG).</div>
+                <img id="imagePreview" class="image-preview" alt="Image preview">
+            </div>
+
+            <!-- Register Button -->
+            <div class="group_form">
+                <button type="submit" id="registerButton">Register</button>
+            </div>
+        </form>
+        <div class="loading-spinner" id="loadingSpinner"></div>
     </div>
 
     <script>
-        const BASE_URL = 'https://realform-4g8155rbf-abrahams-projects-dd6fb99d.vercel.app'; // Your deployed URL
+        const form = document.getElementById('registrationForm');
 
-        async function loadRegistrations(page = 1) {
-            let credentials = sessionStorage.getItem('adminCredentials');
-
-            if (!credentials) {
-                const userInput = prompt('Enter admin credentials in the format username:password');
-                if (!userInput || !userInput.includes(':')) {
-                    alert('Invalid format. Please enter credentials in the format username:password');
-                    return;
-                }
-                credentials = btoa(userInput);
-                sessionStorage.setItem('adminCredentials', credentials);
-            }
-
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            
+            const formData = new FormData(form);
             try {
-                const response = await fetch(`${BASE_URL}/api/registrations?page=${page}&limit=10`, {
-                    headers: { 'Authorization': `Basic ${credentials}` }
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    body: formData,
                 });
 
-                if (!response.ok) {
-                    alert('Authentication failed or server error');
-                    sessionStorage.removeItem('adminCredentials');
-                    return;
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert('Registration successful');
+                } else {
+                    alert(`Registration failed: ${result.error}`);
                 }
-
-                const data = await response.json();
-                const totalPages = data.totalPages;
-                const currentPage = data.page;
-
-                const registrationsDiv = document.getElementById('registrations');
-                registrationsDiv.innerHTML = data.docs.map(reg => {
-                    const optimizedImageUrl = reg.profilePicture
-                        .replace('/upload/', '/upload/w_400,h_400,c_fill,q_auto,f_auto/');
-
-                    return `
-                        <div class="registration" id="${reg._id}">
-                            <img src="${optimizedImageUrl}" 
-                                 alt="${reg.firstName}'s profile picture"
-                                 onclick="window.open('${reg.profilePicture}')">
-                            <p><strong>Name:</strong> ${reg.firstName} ${reg.lastName}</p>
-                            <p><strong>Email:</strong> ${reg.email}</p>
-                            <p><strong>DOB:</strong> ${new Date(reg.dateOfBirth).toLocaleDateString()}</p>
-                            <p><strong>Gender:</strong> ${reg.gender}</p>
-                            ${reg.biography ? `<p><strong>Bio:</strong> ${reg.biography}</p>` : ''}
-                            <button class="delete-btn" onclick="deleteRegistration('${reg._id}')">Delete</button>
-                        </div>
-                    `;
-                }).join('');
-
-                const paginationDiv = document.getElementById('pagination');
-                paginationDiv.innerHTML = `
-                    <button ${currentPage === 1 ? 'disabled' : ''} onclick="loadRegistrations(${currentPage - 1})">Previous</button>
-                    <span>Page ${currentPage} of ${totalPages}</span>
-                    <button ${currentPage >= totalPages ? 'disabled' : ''} onclick="loadRegistrations(${currentPage + 1})">Next</button>
-                `;
             } catch (error) {
-                console.error('Error:', error);
-                alert('Failed to load registrations');
+                alert(`An error occurred: ${error.message}`);
             }
-        }
+        });
 
-        async function deleteRegistration(id) {
-            let credentials = sessionStorage.getItem('adminCredentials');
+        // Image preview functionality
+        const profilePictureInput = document.getElementById('profilePicture');
+        const imagePreview = document.getElementById('imagePreview');
 
-            if (!credentials) {
-                const userInput = prompt('Enter admin credentials in the format username:password');
-                if (!userInput || !userInput.includes(':')) {
-                    alert('Invalid format. Please enter credentials in the format username:password');
-                    return;
-                }
-                credentials = btoa(userInput);
-                sessionStorage.setItem('adminCredentials', credentials);
+        profilePictureInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
             }
-
-            try {
-                const response = await fetch(`${BASE_URL}/api/registration/${id}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Basic ${credentials}` }
-                });
-
-                if (!response.ok) {
-                    alert('Failed to delete registration');
-                    return;
-                }
-
-                document.getElementById(id).remove();
-                alert('Registration deleted successfully');
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Failed to delete registration');
-            }
-        }
-
-        // Initial load
-        loadRegistrations();
+        });
     </script>
 </body>
 </html>
